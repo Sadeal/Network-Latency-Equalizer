@@ -1,0 +1,114 @@
+#!/bin/bash
+# /opt/ping-manager/runping
+
+SERVICE_NAME="ping-manager.service"
+UNIT_PATH="/etc/systemd/system/$SERVICE_NAME"
+
+# Полный путь к текущему скрипту и директория
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PING_SCRIPT="$SCRIPT_DIR/ping.sh"
+
+usage() {
+    echo "Использование:"
+    echo "  runping PORT1 MIN1 [PORT2 MIN2 ...]  - создать/обновить сервис и запустить"
+    echo "  runping -d | --delete               - остановить и удалить сервис"
+    echo "  runping -r | --restart              - перезапустить сервис с теми же аргументами"
+    exit 1
+}
+
+if [ "$EUID" -ne 0 ]; then
+    echo "Нужно root (sudo)" >&2
+    exit 1
+fi
+
+if [ $# -eq 0 ]; then
+    usage
+fi
+
+CMD="$1"
+shift
+
+# Удаление сервиса
+if [[ "$CMD" == "-d" || "$CMD" == "--delete" ]]; then
+    systemctl stop "$SERVICE_NAME" 2>/dev/null
+    systemctl disable "$SERVICE_NAME" 2>/dev/null
+    rm -f "$UNIT_PATH"
+    systemctl daemon-reload
+    echo "Сервис $SERVICE_NAME удалён"
+    exit 0
+fi
+
+# Перезапуск с теми же аргами
+if [[ "$CMD" == "-r" || "$CMD" == "--restart" ]]; then
+    if [ ! -f "$UNIT_PATH" ]; then
+        echo "Сервис $SERVICE_NAME не найден, нечего перезапускать" >&2
+        exit 1
+    fi
+
+    OLD_LINE=$(grep '^ExecStart=' "$UNIT_PATH" || true)
+    if [ -z "$OLD_LINE" ]; then
+        echo "Не удалось прочитать ExecStart из $UNIT_PATH" >&2
+        exit 1
+    fi
+
+    OLD_ARGS=${OLD_LINE#ExecStart=$PING_SCRIPT }
+    if [ "$OLD_ARGS" = "$OLD_LINE" ]; then
+        echo "ExecStart не содержит $PING_SCRIPT, проверь unit" >&2
+        exit 1
+    fi
+
+    cat > "$UNIT_PATH" <<EOF
+[Unit]
+Description=Ping manager (netem per-port)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=$PING_SCRIPT $OLD_ARGS
+Restart=always
+RestartSec=5
+WorkingDirectory=$SCRIPT_DIR
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable "$SERVICE_NAME"
+    systemctl restart "$SERVICE_NAME"
+    echo "Сервис $SERVICE_NAME перезапущен с аргументами: $OLD_ARGS"
+    exit 0
+fi
+
+# Иначе: создаём/обновляем сервис с новыми аргами
+ARGS=("$CMD" "$@")
+
+if [ $(( ${#ARGS[@]} % 2 )) -ne 0 ]; then
+    echo "Ошибка: количество аргументов должно быть чётным: PORT1 MIN1 PORT2 MIN2 ..." >&2
+    exit 1
+fi
+
+cat > "$UNIT_PATH" <<EOF
+[Unit]
+Description=Ping manager (netem per-port)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=$PING_SCRIPT ${ARGS[*]}
+Restart=always
+RestartSec=5
+WorkingDirectory=$SCRIPT_DIR
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable "$SERVICE_NAME"
+systemctl restart "$SERVICE_NAME"
+
+echo "Сервис $SERVICE_NAME создан/обновлён"
+echo "Команда: $PING_SCRIPT ${ARGS[*]}"
