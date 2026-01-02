@@ -21,10 +21,10 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-if [ $# -lt 2 ] || [ $((($# % 2))) -ne 0 ]; then
+if [ $# -lt 3 ] || [ $((($# % 3))) -ne 0 ]; then
     error_log "Неправильные аргументы"
-    echo "Использование: $0 PORT1 MIN_PING1 PORT2 MIN_PING2 ..."
-    echo "Пример: $0 27055 30"
+    echo "Использование: $0 PORT1 PING_PORT1 MIN_PING1 PORT2 PING_PORT2 MIN_PING2 ..."
+    echo "Пример: $0 27055 27056 30"
     exit 1
 fi
 
@@ -89,12 +89,12 @@ trap cleanup EXIT SIGINT SIGTERM
 TEMP_ARGS=("$@")
 while [ ${#TEMP_ARGS[@]} -gt 0 ]; do
     PORT=${TEMP_ARGS[0]}
-    MIN_PING=${TEMP_ARGS[1]}
+    PING_PORT=${TEMP_ARGS[1]}
+    MIN_PING=${TEMP_ARGS[2]}
     PORT_DELAYS[$PORT]=$MIN_PING
-    PING_PORT=$((PORT + 1))
     PORT_PING_PORTS[$PORT]=$PING_PORT
     info_log "Порт: $PORT -> мин. пинг: ${MIN_PING}ms, пинг-порт: $PING_PORT"
-    TEMP_ARGS=("${TEMP_ARGS[@]:2}")
+    TEMP_ARGS=("${TEMP_ARGS[@]:3}")
 done
 
 FIRST_PING_PORT=${PORT_PING_PORTS[${!PORT_PING_PORTS[@]}]}
