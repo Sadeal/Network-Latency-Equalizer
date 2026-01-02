@@ -16,7 +16,7 @@ Manage your clients (users) latency and set it to your minimum. For example, you
 3. Inside plugin folder edit pingreporter.cfg
 ```
 proxy_ip = YOUR_SERVER_IP
-proxy_port = YOUR_SERVER_PORT + 1
+proxy_port = PING_PORT
 ```
 5. Write this commands on your VPS/VDS/DS:
 ```shell
@@ -29,7 +29,7 @@ sudo ln -s /opt/ping/runping /usr/local/bin/runping
 (You dont need "sudo" if you already admin user)
 1. Start
 ```shell
-sudo runping port1 ping1 port2 ping2 port3 ping3 ....
+sudo runping port1 ping_port1 ping1 port2 ping_port2 ping2 port3 ping_port3 ping3 ....
 ```
 2. Restart
 ```shell
@@ -48,5 +48,20 @@ sudo runping -delete
 
 ```shell
 sudo chmod +x /path/to/script/ping.sh
-/path/to/script/ping.sh port1 ping1 port2 ping2 port3 ping3 ....
+/path/to/script/ping.sh port1 ping_port1 ping1 port2 ping_port2 ping2 port3 ping_port3 ping3 ....
+```
+
+## EXAMPLE
+1. pingreporter.cfg
+```
+proxy_ip = 177.177.177.177
+proxy_port = 27020
+```
+2. Your server address: 177.177.177.177:27015
+3. Launch script:
+```shell
+sudo runping 27015 27020 30
+# 27015 - SERVER_PORT
+# 27020 - PING_PORT from pingreporter.cfg
+# 30 - minimum ping to set
 ```
