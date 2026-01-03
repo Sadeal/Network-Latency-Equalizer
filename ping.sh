@@ -332,12 +332,18 @@ while true; do
             # D_new = TARGET_PING - REAL_PING
             NEEDED_DELAY=$((TARGET_PING - REAL_PING))
 
-            # Порог чувствительности: если разница < 2ms — не трогаем
+            # Порог чувствительности: если разница < 2ms && NEEDED_DELAY > 10 || < 1ms && NEEDED_DELAY <= 10 — не трогаем
             DIFF=$((NEEDED_DELAY - ADDED_DELAY))
             [ $DIFF -lt 0 ] && DIFF=$(( -DIFF ))
 
-            if [ "$DIFF" -lt 2 ]; then
-                debug_log "  $key: нужно ${NEEDED_DELAY}ms, сейчас ${ADDED_DELAY}ms, diff=${DIFF}ms < 2ms, не трогаем"
+            if [ "$NEEDED_DELAY" -gt 10 ]; then
+                THRESHOLD=2
+            else
+                THRESHOLD=1
+            fi
+
+            if [ "$DIFF" -lt "$THRESHOLD" ]; then
+                debug_log "  $key: нужно ${NEEDED_DELAY}ms, сейчас ${ADDED_DELAY}ms, diff=${DIFF}ms < ${THRESHOLD}ms, не трогаем"
                 continue
             fi
 
