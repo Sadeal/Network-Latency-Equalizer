@@ -5,7 +5,8 @@ SERVICE_NAME="ping-manager.service"
 UNIT_PATH="/etc/systemd/system/$SERVICE_NAME"
 
 # Полный путь к текущему скрипту и директория
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 PING_SCRIPT="$SCRIPT_DIR/ping.sh"
 
 usage() {
@@ -112,3 +113,4 @@ systemctl restart "$SERVICE_NAME"
 
 echo "Сервис $SERVICE_NAME создан/обновлён"
 echo "Команда: $PING_SCRIPT ${ARGS[*]}"
+
