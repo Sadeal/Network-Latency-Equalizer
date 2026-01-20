@@ -101,20 +101,35 @@ FIRST_PING_PORT=${PORT_PING_PORTS[${!PORT_PING_PORTS[@]}]}
 
 start_udp_listener() {
     local ip=$1
-    local port=$2
+    local ports_list=$2  # Передаем строку с портами через пробел
 
-    info_log "Запуск UDP listener (tcpdump) на $ip:$port"
+    # Формируем BPF фильтр: (udp port 27056 or udp port 27057 ...)
+    local port_filter=""
+    for port in $ports_list; do
+        if [ -z "$port_filter" ]; then
+            port_filter="udp port $port"
+        else
+            port_filter="$port_filter or udp port $port"
+        fi
+    done
+
+    local final_filter="($port_filter) and dst host $ip"
+
+    info_log "Запуск UDP listener (tcpdump) с фильтром: $final_filter"
 
     (
-        tcpdump -i any -n -l -A "udp port $port and dst host $ip" 2>/dev/null | \
+        # Запускаем tcpdump один раз для всех портов
+        tcpdump -i any -n -l -A "$final_filter" 2>/dev/null | \
         while read -r line; do
+            # Ищем паттерн IP|PING в payload пакета
+            # Например: 192.168.1.5|45
             if [[ "$line" =~ ([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\|([0-9]+) ]]; then
                 client_ip="${BASH_REMATCH[1]}"
                 ping_value="${BASH_REMATCH[2]}"
 
                 if [[ "$client_ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
                     echo "$(date +%s)|$client_ip|$ping_value" >> "$UDP_DATA_FILE"
-                    debug_log "UDP: $client_ip -> ${ping_value}ms"
+                    debug_log "UDP Packet: $client_ip -> ${ping_value}ms"
                 fi
             fi
         done
@@ -241,11 +256,17 @@ tc class add dev "$INTERFACE" parent 1: classid 1:1 htb rate "$TC_RATE" ceil "$T
 TC_INITIALIZED=1
 info_log "TC (HTB) инициализирован успешно"
 
-start_udp_listener "$SERVER_IP" "$FIRST_PING_PORT"
+ALL_PING_PORTS=""
+for p in "${PORT_PING_PORTS[@]}"; do
+    ALL_PING_PORTS="$ALL_PING_PORTS $p"
+done
+
+# Запускаем listener один раз для всех портов
+start_udp_listener "$SERVER_IP" "$ALL_PING_PORTS"
 sleep 2
 
 if ! ps -p $UDP_LISTENER_PID > /dev/null 2>&1; then
-    error_log "UDP listener не запустился!"
+    error_log "UDP listener не запустился! Проверьте tcpdump."
     exit 1
 fi
 
