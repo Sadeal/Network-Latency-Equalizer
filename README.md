@@ -1,6 +1,6 @@
 ### Network-Latency-Equalizer
 ## ONLY FOR SELF-HOSTED SERVERS VIA VPS/VDS/DS
-
+ 
 ## Description
 Manage your clients (users) latency and set it to your minimum. For example, you can launch script with 30 latency minimum and everyone who has less latency then 30 - will get additional latency to be with 30. If client has equal or more ping then 30 - nothing happen.
 
