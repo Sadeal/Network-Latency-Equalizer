@@ -11,7 +11,7 @@ PING_SCRIPT="$SCRIPT_DIR/ping.sh"
 
 usage() {
     echo "Использование:"
-    echo "  runping PORT1 MIN1 [PORT2 MIN2 ...]  - создать/обновить сервис и запустить"
+    echo "  runping PORT1 PING_PORT1 MIN1 [PORT2 PING_PORT2 MIN2 ...]  - создать/обновить сервис и запустить"
     echo "  runping -d | --delete               - остановить и удалить сервис"
     echo "  runping -r | --restart              - перезапустить сервис с теми же аргументами"
     exit 1
@@ -85,8 +85,8 @@ fi
 # Иначе: создаём/обновляем сервис с новыми аргами
 ARGS=("$CMD" "$@")
 
-if [ $(( ${#ARGS[@]} % 2 )) -ne 0 ]; then
-    echo "Ошибка: количество аргументов должно быть чётным: PORT1 MIN1 PORT2 MIN2 ..." >&2
+if [ $(( ${#ARGS[@]} % 3 )) -ne 0 ]; then
+    echo "Ошибка: количество аргументов должно быть чётным: PORT1 PING_PORT1 MIN1 PORT2 PING_PORT2 MIN2 ..." >&2
     exit 1
 fi
 
@@ -113,4 +113,5 @@ systemctl restart "$SERVICE_NAME"
 
 echo "Сервис $SERVICE_NAME создан/обновлён"
 echo "Команда: $PING_SCRIPT ${ARGS[*]}"
+
 
