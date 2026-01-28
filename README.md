@@ -72,7 +72,7 @@ Now you can manipulate clients ping using plugin
 ALL COMMANDS CAN BE EXECUTED ONLY FROM CONSOLE OR USER WITH @css/root flag!
 ```
 // All commands may be executed with and without css_
-set_ping <steamID64|part_user_name|slot/id] <ping> // set required user needed ping
-clear_pings // clears all setted pings
-list_pings // shows all users that were affected by manual ping setter
+ping_set <steamID64|part_user_name|slot/id] <ping> // set required user needed ping
+ping_clear // clears all setted pings
+ping_list // shows all users that were affected by manual ping setter
 ```
