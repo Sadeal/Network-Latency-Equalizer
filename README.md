@@ -65,3 +65,13 @@ sudo runping 27015 27020 30
 # 27020 - PING_PORT from pingreporter.cfg
 # 30 - minimum ping to set
 ```
+
+## PLUGIN USAGE
+Now you can manipulate clients ping using plugin
+ALL COMMANDS CAN BE EXECUTED ONLY FROM CONSOLE OR USER WITH @css/root flag!
+```
+// All commands may be executed with and without css_
+set_ping <steamID64|part_user_name|slot/id] <ping> // set required user needed ping
+clear_pings // clears all setted pings
+list_pings // shows all users that were affected by manual ping setter
+```
