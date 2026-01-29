@@ -74,7 +74,10 @@ LOWER_HYSTERESIS=0
 PING_SAMPLES=5
 MIN_SAMPLES_BEFORE_ACTION=3
 CLIENT_TIMEOUT=30
-MIN_DELAY_CHANGE=2
+
+MIN_DELAY_INCREASE=1
+MIN_DELAY_DECREASE=2
+
 STABILIZATION_CYCLES=3
 DELAY_SETTLE_TIME=3
 
@@ -567,7 +570,7 @@ while true; do
             
             if [ "$BASE_PING" -ge $((TARGET_PING + UPPER_HYSTERESIS)) ]; then
                 if [ "$ADDED_DELAY" -gt 0 ]; then
-                    info_log "→ $key: base=${BASE_PING}ms >= target+2=$((TARGET_PING + UPPER_HYSTERESIS))ms, убираем задержку"
+                    info_log "→ $key: base=${BASE_PING}ms >= target+${UPPER_HYSTERESIS}=$((TARGET_PING + UPPER_HYSTERESIS))ms, убираем задержку"
                     set_delay_for_key "$PORT" "$CLIENT_IP" 0 "${KEY_CLASSID[$key]:-$CLASSID_COUNTER}"
                 fi
                 continue
@@ -575,10 +578,20 @@ while true; do
             
             if [ "$BASE_PING" -lt "$TARGET_PING" ]; then
                 DIFF=$((NEEDED_DELAY - ADDED_DELAY))
-                [ "$DIFF" -lt 0 ] && DIFF=$(( -DIFF ))
                 
-                if [ "$DIFF" -lt "$MIN_DELAY_CHANGE" ]; then
-                    debug_log "  $key: изменение ${DIFF}ms < ${MIN_DELAY_CHANGE}ms, пропускаем"
+                if [ "$DIFF" -gt 0 ]; then
+                    if [ "$DIFF" -lt "$MIN_DELAY_INCREASE" ]; then
+                        debug_log "  $key: увеличение ${DIFF}ms < ${MIN_DELAY_INCREASE}ms, пропускаем"
+                        continue
+                    fi
+                elif [ "$DIFF" -lt 0 ]; then
+                    DIFF_ABS=$(( -DIFF ))
+                    if [ "$DIFF_ABS" -lt "$MIN_DELAY_DECREASE" ]; then
+                        debug_log "  $key: уменьшение ${DIFF_ABS}ms < ${MIN_DELAY_DECREASE}ms, пропускаем"
+                        continue
+                    fi
+                else
+                    debug_log "  $key: delay уже оптимален (${ADDED_DELAY}ms)"
                     continue
                 fi
                 
@@ -592,10 +605,10 @@ while true; do
                     fi
                 fi
                 
-                info_log "→ $key: avg=${AVG_PING}ms, base=${BASE_PING}ms < target=${TARGET_PING}ms($TARGET_SOURCE), delay: ${ADDED_DELAY}ms -> ${NEEDED_DELAY}ms"
+                info_log "→ $key: avg=${AVG_PING}ms, base=${BASE_PING}ms, target=${TARGET_PING}ms($TARGET_SOURCE), delay: ${ADDED_DELAY}ms -> ${NEEDED_DELAY}ms"
                 set_delay_for_key "$PORT" "$CLIENT_IP" "$NEEDED_DELAY" "${KEY_CLASSID[$key]}"
             else
-                debug_log "  $key: base=${BASE_PING}ms в нейтральной зоне [TARGET, TARGET+1], сохраняем delay=${ADDED_DELAY}ms"
+                debug_log "  $key: base=${BASE_PING}ms в нейтральной зоне [${TARGET_PING}, $((TARGET_PING + UPPER_HYSTERESIS - 1))], delay=${ADDED_DELAY}ms"
             fi
         done
         
