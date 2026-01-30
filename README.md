@@ -75,4 +75,5 @@ ALL COMMANDS CAN BE EXECUTED ONLY FROM CONSOLE OR USER WITH @css/root flag!
 ping_set <steamID64|part_user_name|slot/id] <ping> // set required user needed ping
 ping_clear // clears all setted pings
 ping_list // shows all users that were affected by manual ping setter
+ping_all <ping> // sets all ping to <ping>. Ignores previous ping_set, but not ping_set after ping_all. ping_all 0 will clear all affected clients but not from ping_set
 ```
