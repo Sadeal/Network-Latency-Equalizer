@@ -313,6 +313,7 @@ set_delay_for_key() {
     
     tc filter add dev "$INTERFACE" parent 1: protocol ip prio "$classid" u32 \
         match ip dst "$ip" \
+        match ip dport "$port" 0xffff \
         flowid 1:"$classid" 2>/dev/null
     
     KEY_CLASSID[$key]=$classid
@@ -528,13 +529,18 @@ while true; do
             fi
             
             history_count=$(get_history_count "$key")
-            if [ "$history_count" -lt "$MIN_SAMPLES_BEFORE_ACTION" ]; then
-                debug_log "  $key: накопление замеров ($history_count/$MIN_SAMPLES_BEFORE_ACTION)..."
+            has_rule=${KEY_HAS_RULE[$key]:-0}
+            required_samples=$MIN_SAMPLES_BEFORE_ACTION
+            if [ "$has_rule" -ne 1 ]; then
+                required_samples=1
+            fi
+            if [ "$history_count" -lt "$required_samples" ]; then
+                debug_log "  $key: накопление замеров ($history_count/$required_samples)..."
                 continue
             fi
             
             stable_counter=${KEY_STABLE_COUNTER[$key]:-0}
-            if [ "$stable_counter" -gt 0 ]; then
+            if [ "$has_rule" -eq 1 ] && [ "$stable_counter" -gt 0 ]; then
                 KEY_STABLE_COUNTER[$key]=$((stable_counter - 1))
                 debug_log "  $key: период стабилизации (осталось ${KEY_STABLE_COUNTER[$key]} циклов)"
                 continue
