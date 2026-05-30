@@ -17,8 +17,64 @@ usage() {
     exit 1
 }
 
+is_integer() {
+    [[ "$1" =~ ^[0-9]+$ ]]
+}
+
+validate_port() {
+    local port=$1
+    is_integer "$port" && [ "$port" -ge 1 ] && [ "$port" -le 65535 ]
+}
+
+validate_delay() {
+    local delay=$1
+    is_integer "$delay" && [ "$delay" -ge 0 ] && [ "$delay" -le 60000 ]
+}
+
+systemd_quote() {
+    local value=$1
+    value=${value//\\/\\\\}
+    value=${value//\"/\\\"}
+    printf '"%s"' "$value"
+}
+
+write_unit() {
+    local exec_start="/bin/bash $(systemd_quote "$PING_SCRIPT")"
+    local working_directory
+    local arg
+
+    for arg in "$@"; do
+        exec_start+=" $(systemd_quote "$arg")"
+    done
+    working_directory=$(systemd_quote "$SCRIPT_DIR")
+
+    cat > "$UNIT_PATH" <<EOF
+[Unit]
+Description=Ping manager (netem per-port)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=$exec_start
+Restart=always
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=15
+WorkingDirectory=$working_directory
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
 if [ "$EUID" -ne 0 ]; then
     echo "Нужно root (sudo)" >&2
+    exit 1
+fi
+
+if ! command -v systemctl > /dev/null 2>&1; then
+    echo "Не найдена команда systemctl" >&2
     exit 1
 fi
 
@@ -33,8 +89,14 @@ shift
 if [[ "$CMD" == "-d" || "$CMD" == "--delete" ]]; then
     systemctl stop "$SERVICE_NAME" 2>/dev/null
     systemctl disable "$SERVICE_NAME" 2>/dev/null
-    rm -f "$UNIT_PATH"
-    systemctl daemon-reload
+    if ! rm -f "$UNIT_PATH"; then
+        echo "Не удалось удалить unit $UNIT_PATH" >&2
+        exit 1
+    fi
+    if ! systemctl daemon-reload; then
+        echo "Не удалось перечитать конфигурацию systemd" >&2
+        exit 1
+    fi
     echo "Сервис $SERVICE_NAME удалён"
     exit 0
 fi
@@ -46,39 +108,11 @@ if [[ "$CMD" == "-r" || "$CMD" == "--restart" ]]; then
         exit 1
     fi
 
-    OLD_LINE=$(grep '^ExecStart=' "$UNIT_PATH" || true)
-    if [ -z "$OLD_LINE" ]; then
-        echo "Не удалось прочитать ExecStart из $UNIT_PATH" >&2
+    if ! systemctl restart "$SERVICE_NAME"; then
+        echo "Не удалось перезапустить сервис $SERVICE_NAME" >&2
         exit 1
     fi
-
-    OLD_ARGS=${OLD_LINE#ExecStart=$PING_SCRIPT }
-    if [ "$OLD_ARGS" = "$OLD_LINE" ]; then
-        echo "ExecStart не содержит $PING_SCRIPT, проверь unit" >&2
-        exit 1
-    fi
-
-    cat > "$UNIT_PATH" <<EOF
-[Unit]
-Description=Ping manager (netem per-port)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=$PING_SCRIPT $OLD_ARGS
-Restart=always
-RestartSec=5
-WorkingDirectory=$SCRIPT_DIR
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl daemon-reload
-    systemctl enable "$SERVICE_NAME"
-    systemctl restart "$SERVICE_NAME"
-    echo "Сервис $SERVICE_NAME перезапущен с аргументами: $OLD_ARGS"
+    echo "Сервис $SERVICE_NAME перезапущен с прежними аргументами"
     exit 0
 fi
 
@@ -86,30 +120,65 @@ fi
 ARGS=("$CMD" "$@")
 
 if [ $(( ${#ARGS[@]} % 3 )) -ne 0 ]; then
-    echo "Ошибка: количество аргументов должно быть чётным: PORT1 PING_PORT1 MIN1 PORT2 PING_PORT2 MIN2 ..." >&2
+    echo "Ошибка: количество аргументов должно быть кратно трём: PORT1 PING_PORT1 MIN1 PORT2 PING_PORT2 MIN2 ..." >&2
     exit 1
 fi
 
-cat > "$UNIT_PATH" <<EOF
-[Unit]
-Description=Ping manager (netem per-port)
-After=network-online.target
-Wants=network-online.target
+if [ ! -f "$PING_SCRIPT" ]; then
+    echo "Не найден скрипт $PING_SCRIPT" >&2
+    exit 1
+fi
 
-[Service]
-Type=simple
-ExecStart=$PING_SCRIPT ${ARGS[*]}
-Restart=always
-RestartSec=5
-WorkingDirectory=$SCRIPT_DIR
+if [ ! -x /bin/bash ]; then
+    echo "Не найден /bin/bash" >&2
+    exit 1
+fi
 
-[Install]
-WantedBy=multi-user.target
-EOF
+for command_name in ip tc tcpdump conntrack awk sort tail wc mktemp; do
+    if ! command -v "$command_name" > /dev/null 2>&1; then
+        echo "Не найдена обязательная команда: $command_name" >&2
+        exit 1
+    fi
+done
 
-systemctl daemon-reload
-systemctl enable "$SERVICE_NAME"
-systemctl restart "$SERVICE_NAME"
+declare -A SEEN_GAME_PORTS
+for ((i = 0; i < ${#ARGS[@]}; i += 3)); do
+    if ! validate_port "${ARGS[$i]}"; then
+        echo "Некорректный игровой порт: ${ARGS[$i]}" >&2
+        exit 1
+    fi
+    if ! validate_port "${ARGS[$((i + 1))]}"; then
+        echo "Некорректный ping-порт: ${ARGS[$((i + 1))]}" >&2
+        exit 1
+    fi
+    if ! validate_delay "${ARGS[$((i + 2))]}"; then
+        echo "Некорректный минимальный пинг: ${ARGS[$((i + 2))]}" >&2
+        exit 1
+    fi
+    if [ -n "${SEEN_GAME_PORTS[${ARGS[$i]}]+x}" ]; then
+        echo "Игровой порт указан несколько раз: ${ARGS[$i]}" >&2
+        exit 1
+    fi
+    SEEN_GAME_PORTS[${ARGS[$i]}]=1
+done
+
+if ! write_unit "${ARGS[@]}"; then
+    echo "Не удалось записать unit $UNIT_PATH" >&2
+    exit 1
+fi
+
+if ! systemctl daemon-reload; then
+    echo "Не удалось перечитать конфигурацию systemd" >&2
+    exit 1
+fi
+if ! systemctl enable "$SERVICE_NAME"; then
+    echo "Не удалось включить сервис $SERVICE_NAME" >&2
+    exit 1
+fi
+if ! systemctl restart "$SERVICE_NAME"; then
+    echo "Не удалось запустить сервис $SERVICE_NAME" >&2
+    exit 1
+fi
 
 echo "Сервис $SERVICE_NAME создан/обновлён"
 echo "Команда: $PING_SCRIPT ${ARGS[*]}"
