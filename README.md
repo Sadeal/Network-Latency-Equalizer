@@ -20,9 +20,15 @@ proxy_port = PING_PORT
 ```
 5. Write this commands on your VPS/VDS/DS:
 ```shell
-sudo chmod +x /opt/ping/ping.sh
-sudo chmod +x /opt/ping/runping
-sudo ln -s /opt/ping/runping /usr/local/bin/runping
+sudo apt-get update
+sudo apt-get install -y iproute2 tcpdump conntrack
+
+sudo install -d -m 0755 /opt/ping
+
+sudo sed -i 's/\r$//' /opt/ping/ping.sh /opt/ping/runping
+sudo chmod 755 /opt/ping/ping.sh /opt/ping/runping
+
+sudo ln -sfn /opt/ping/runping /usr/local/bin/runping
 ```
 
 ## Usage
